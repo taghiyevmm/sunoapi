@@ -45,6 +45,7 @@ export default function Home() {
   const audioRef = useRef<HTMLAudioElement>(null);
   // Use default API key - no user input needed
   const apiKey = '55fc5a26ff12dd6a1ab709d8d37e0cd4';
+  const clientApiKey = 'dacf3ada40b69f623d6ad37c08d7c21b7ae1d14e66aeeb909cdaab1ccc2010ac';
 
   const checkStatus = async (taskId: string, key: string) => {
     const maxAttempts = 20; // 10 minutes max (20 * 30 seconds) - following API recommendations
@@ -111,6 +112,7 @@ export default function Home() {
         const response = await fetch(`/api/status?taskId=${taskId}`, {
           headers: {
             'x-suno-api-key': key,
+            'X-API-Key': clientApiKey,
           },
         });
         
@@ -236,7 +238,10 @@ export default function Home() {
     try {
       const response = await fetch('/api/generate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': clientApiKey,
+        },
         body: JSON.stringify({ prompt, apiKey: activeKey }),
       });
 
@@ -282,6 +287,7 @@ export default function Home() {
       const response = await fetch('/api/credits', {
         headers: {
           'x-suno-api-key': activeKey,
+          'X-API-Key': clientApiKey,
         },
       });
       const data = await response.json();
@@ -320,7 +326,10 @@ export default function Home() {
     try {
       const response = await fetch('/api/video', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': clientApiKey,
+        },
         body: JSON.stringify({
           taskId: currentTaskId,
           audioId: currentAudioId,
@@ -405,6 +414,7 @@ export default function Home() {
         const response = await fetch(`/api/video-status?taskId=${taskId}`, {
           headers: {
             'x-suno-api-key': apiKey,
+            'X-API-Key': clientApiKey,
           },
         });
 
@@ -468,7 +478,10 @@ export default function Home() {
     try {
       const response = await fetch('/api/cover', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': clientApiKey,
+        },
         body: JSON.stringify({
           taskId: taskId,
           apiKey: apiKey
@@ -555,6 +568,7 @@ export default function Home() {
         const response = await fetch(`/api/cover-status?taskId=${coverTaskId}`, {
           headers: {
             'x-suno-api-key': apiKey,
+            'X-API-Key': clientApiKey,
           },
         });
 
