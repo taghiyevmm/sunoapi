@@ -2,10 +2,11 @@ import { NextResponse } from 'next/server';
 
 export async function POST(request: Request) {
   const body = await request.json();
-  const { taskId, audioId } = body;
+  const { taskId, audioId, apiKey } = body;
   const headerKey = request.headers.get('x-suno-api-key')?.trim();
   const defaultKey = process.env.SUNOAPI_KEY;
-  const token = headerKey || defaultKey;
+  // Accept apiKey from body, header, or environment variable (in order of priority)
+  const token = (typeof apiKey === 'string' ? apiKey.trim() : '') || headerKey || defaultKey;
 
   if (!taskId || !audioId) {
     return NextResponse.json({ error: 'Task ID and Audio ID are required' }, { status: 400 });
