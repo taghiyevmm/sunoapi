@@ -1,5 +1,5 @@
 'use client';
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import Navigation from './components/Navigation';
 import LyricsDisplay from './components/LyricsDisplay';
 
@@ -12,6 +12,13 @@ interface Song {
   taskId: string;
   audioId: string;
   coverImages?: string[];
+}
+
+interface SavedPersona {
+  id: string;
+  name: string;
+  description: string;
+  createdAt: string;
 }
 
 interface GeneratedTrack {
@@ -61,6 +68,21 @@ export default function Home() {
   const [negativeTags, setNegativeTags] = useState('');
   const [styleWeight, setStyleWeight] = useState(0.5);
   const [weirdnessConstraint, setWeirdnessConstraint] = useState(0.5);
+  const [audioWeight, setAudioWeight] = useState(0.5);
+
+  // Persona system
+  const [savedPersonas, setSavedPersonas] = useState<SavedPersona[]>([]);
+  const [selectedPersonaId, setSelectedPersonaId] = useState('');
+  const [showPersonaModal, setShowPersonaModal] = useState(false);
+  const [personaName, setPersonaName] = useState('');
+  const [personaDescription, setPersonaDescription] = useState('');
+  const [personaCreating, setPersonaCreating] = useState(false);
+
+  // Load saved personas from localStorage on mount
+  useEffect(() => {
+    const saved = JSON.parse(localStorage.getItem('sunoPersonas') || '[]') as SavedPersona[];
+    setSavedPersonas(saved);
+  }, []);
 
   const checkStatus = async (taskId: string, key: string) => {
     const maxAttempts = 20; // 10 minutes max (20 * 30 seconds) - following API recommendations
@@ -110,12 +132,12 @@ export default function Home() {
       const elapsedMinutes = Math.floor(elapsed / 60);
       const elapsedSeconds = elapsed % 60;
       const timeStr = `${elapsedMinutes}:${elapsedSeconds.toString().padStart(2, '0')}`;
-      
+
       // Rotate through fun messages every 10 seconds
       if (elapsed % 10 === 0 && elapsed > 0) {
         messageIndex = (messageIndex + 1) % shuffledMessages.length;
       }
-      
+
       const tipText = elapsed < 30 ? ' • Typical generation: 2-4 minutes' : '';
       setStatusMessage(`${shuffledMessages[messageIndex]} (${timeStr})${tipText}`);
     }, 1000);
@@ -130,7 +152,7 @@ export default function Home() {
             'X-API-Key': clientApiKey,
           },
         });
-        
+
         if (!response.ok) {
           console.error('Status check failed:', response.status);
           await new Promise(resolve => setTimeout(resolve, 30000)); // 30 seconds as recommended
@@ -138,7 +160,7 @@ export default function Home() {
         }
 
         const data = await response.json();
-        
+
         // Log for debugging
         console.log('Poll response:', data);
 
@@ -159,10 +181,10 @@ export default function Home() {
         } else if (data.status === 'FIRST_SUCCESS') {
           setStatusMessage('🎵 First song ready! Generating second version...');
         }
-        
+
         if (data.status === 'SUCCESS' && data.audioUrl) {
           clearInterval(timerInterval); // Stop the timer
-          
+
           // Store all generated tracks with their built-in cover art
           const tracks = data.tracks || [{
             audioUrl: data.audioUrl,
@@ -174,21 +196,21 @@ export default function Home() {
           }];
           setGeneratedTracks(tracks);
           setSelectedTrackIndex(0);
-          
+
           // Set first track as default and use its built-in cover art
           setAudioUrl(tracks[0].audioUrl);
           setSongTitle(tracks[0].title || 'Your Song');
           setCurrentTaskId(taskId);
           setCurrentAudioId(tracks[0].audioId || '');
-          
+
           // Use the built-in cover art from the track
           if (tracks[0].imageUrl) {
             setCoverImages([tracks[0].imageUrl]);
           }
-          
+
           setStatusMessage(`🎉 ${tracks.length} song${tracks.length > 1 ? 's' : ''} ready with cover art!`);
           setLoading(false);
-          
+
           // Save all tracks to localStorage with cover art
           const saved = JSON.parse(localStorage.getItem('sunoSongs') || '[]') as Song[];
           tracks.forEach((track: GeneratedTrack, index: number) => {
@@ -205,7 +227,7 @@ export default function Home() {
             saved.unshift(song);
           });
           localStorage.setItem('sunoSongs', JSON.stringify(saved.slice(0, 50))); // Keep last 50
-          
+
           return;
         } else if (data.status === 'FAILED') {
           clearInterval(timerInterval); // Stop the timer
@@ -299,6 +321,8 @@ export default function Home() {
           ...(negativeTags.trim() ? { negativeTags: negativeTags.trim() } : {}),
           ...(styleWeight !== 0.5 ? { styleWeight } : {}),
           ...(weirdnessConstraint !== 0.5 ? { weirdnessConstraint } : {}),
+          ...(audioWeight !== 0.5 ? { audioWeight } : {}),
+          ...(selectedPersonaId && !instrumental ? { personaId: selectedPersonaId } : {}),
         }),
       });
 
@@ -456,12 +480,12 @@ export default function Home() {
 
     while (attempts < maxAttempts) {
       attempts++;
-      
+
       const elapsed = Math.floor((Date.now() - startTime) / 1000);
       const elapsedMinutes = Math.floor(elapsed / 60);
       const elapsedSeconds = elapsed % 60;
       const timeStr = `${elapsedMinutes}:${elapsedSeconds.toString().padStart(2, '0')}`;
-      
+
       // Rotate through fun messages every 30 seconds
       if (attempts > 1 && (attempts - 1) % 1 === 0) {
         messageIndex = (messageIndex + 1) % shuffledMessages.length;
@@ -526,6 +550,120 @@ export default function Home() {
     } catch {
       setError('Failed to download video. Please try again.');
     }
+  };
+
+  const createPersona = async () => {
+    if (!currentTaskId || !currentAudioId) {
+      setError('No song available to create persona from');
+      return;
+    }
+
+    if (!personaName.trim()) {
+      setError('Please enter a name for the persona');
+      return;
+    }
+
+    // Check persona limit
+    if (savedPersonas.length >= 10) {
+      setError('Maximum 10 personas allowed. Please delete one before creating a new one.');
+      return;
+    }
+
+    setPersonaCreating(true);
+    setError('');
+
+    try {
+      const response = await fetch('/api/persona', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': clientApiKey,
+        },
+        body: JSON.stringify({
+          taskId: currentTaskId,
+          audioId: currentAudioId,
+          name: personaName.trim(),
+          description: personaDescription.trim(),
+          apiKey: apiKey,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.error) {
+        setError(data.error);
+        setPersonaCreating(false);
+        return;
+      }
+
+      if (data.taskId) {
+        setStatusMessage('Creating voice persona...');
+        await checkPersonaStatus(data.taskId);
+      }
+    } catch (error) {
+      console.error('Persona creation error:', error);
+      setError('Failed to create persona. Please try again.');
+      setPersonaCreating(false);
+    }
+  };
+
+  const checkPersonaStatus = async (taskId: string) => {
+    const maxAttempts = 40; // 20 minutes max
+    let attempts = 0;
+
+    while (attempts < maxAttempts) {
+      attempts++;
+
+      try {
+        const response = await fetch(`/api/persona-status?taskId=${taskId}`, {
+          headers: {
+            'x-suno-api-key': apiKey,
+            'X-API-Key': clientApiKey,
+          },
+        });
+
+        const data = await response.json();
+
+        if (data.error) {
+          setError(data.error);
+          setPersonaCreating(false);
+          return;
+        }
+
+        if (data.status === 'SUCCESS' && data.personaId) {
+          // Save persona to localStorage
+          const newPersona: SavedPersona = {
+            id: data.personaId,
+            name: personaName.trim(),
+            description: personaDescription.trim(),
+            createdAt: new Date().toISOString(),
+          };
+
+          const updatedPersonas = [...savedPersonas, newPersona];
+          setSavedPersonas(updatedPersonas);
+          localStorage.setItem('sunoPersonas', JSON.stringify(updatedPersonas));
+
+          setStatusMessage('Voice persona created successfully!');
+          setPersonaCreating(false);
+          setShowPersonaModal(false);
+          setPersonaName('');
+          setPersonaDescription('');
+          return;
+        } else if (data.status === 'FAILED') {
+          setError('Persona creation failed. Please try again.');
+          setPersonaCreating(false);
+          return;
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 30000)); // 30 seconds
+      } catch (error) {
+        console.error('Persona status check error:', error);
+        await new Promise(resolve => setTimeout(resolve, 30000));
+      }
+    }
+
+    setError('Persona creation timed out. Please try again later.');
+    setPersonaCreating(false);
   };
 
   const generateCover = async (taskId: string) => {
@@ -608,12 +746,12 @@ export default function Home() {
       const elapsedMinutes = Math.floor(elapsed / 60);
       const elapsedSeconds = elapsed % 60;
       const timeStr = `${elapsedMinutes}:${elapsedSeconds.toString().padStart(2, '0')}`;
-      
+
       // Rotate through fun messages every 10 seconds
       if (elapsed % 10 === 0 && elapsed > 0) {
         messageIndex = (messageIndex + 1) % shuffledMessages.length;
       }
-      
+
       const tipText = elapsed < 120 ? ' • Typical generation: 2-4 minutes' : '';
       setStatusMessage(`${shuffledMessages[messageIndex]} (${timeStr})${tipText}`);
     }, 1000);
@@ -712,10 +850,10 @@ export default function Home() {
               <span className="font-medium">
                 {showTips ? 'Hide' : 'Show'} Prompt Tips & Best Practices
               </span>
-              <svg 
+              <svg
                 className={`w-4 h-4 transition-transform ${showTips ? 'rotate-180' : ''}`}
-                fill="none" 
-                stroke="currentColor" 
+                fill="none"
+                stroke="currentColor"
                 viewBox="0 0 24 24"
               >
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -817,11 +955,10 @@ export default function Home() {
               <button
                 onClick={() => setActiveTab('simple')}
                 disabled={loading}
-                className={`flex-1 py-3 px-4 font-semibold transition flex items-center justify-center gap-2 ${
-                  activeTab === 'simple'
+                className={`flex-1 py-3 px-4 font-semibold transition flex items-center justify-center gap-2 ${activeTab === 'simple'
                     ? 'bg-[#556FB5] text-white'
                     : 'bg-white text-gray-700 hover:bg-gray-50'
-                }`}
+                  }`}
               >
                 <span>🎵</span>
                 <span>Simple</span>
@@ -829,11 +966,10 @@ export default function Home() {
               <button
                 onClick={() => setActiveTab('custom')}
                 disabled={loading}
-                className={`flex-1 py-3 px-4 font-semibold transition flex items-center justify-center gap-2 ${
-                  activeTab === 'custom'
+                className={`flex-1 py-3 px-4 font-semibold transition flex items-center justify-center gap-2 ${activeTab === 'custom'
                     ? 'bg-[#556FB5] text-white'
                     : 'bg-white text-gray-700 hover:bg-gray-50'
-                }`}
+                  }`}
               >
                 <span>✏️</span>
                 <span>Custom</span>
@@ -996,6 +1132,73 @@ export default function Home() {
                       <span>Experimental</span>
                     </div>
                   </div>
+
+                  {/* Audio Weight Slider */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Audio Influence: {audioWeight.toFixed(2)}
+                    </label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={audioWeight}
+                      onChange={(e) => setAudioWeight(parseFloat(e.target.value))}
+                      disabled={loading}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-[#556FB5]"
+                    />
+                    <div className="flex justify-between text-xs text-gray-500 mt-1">
+                      <span>Less Similar</span>
+                      <span>More Similar</span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Controls how much output matches reference audio characteristics
+                    </p>
+                  </div>
+
+                  {/* Voice Persona Selector */}
+                  {!instrumental && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Voice Persona
+                      </label>
+                      <div className="flex gap-2">
+                        <select
+                          value={selectedPersonaId}
+                          onChange={(e) => setSelectedPersonaId(e.target.value)}
+                          disabled={loading}
+                          className="flex-1 p-2 border border-gray-300 rounded-lg text-sm bg-white text-gray-700 focus:border-[#4ECDC4] focus:ring-2 focus:ring-[#4ECDC4]/20 focus:outline-none cursor-pointer"
+                        >
+                          <option value="">None (Auto)</option>
+                          {savedPersonas.map((persona) => (
+                            <option key={persona.id} value={persona.id}>
+                              {persona.name}
+                            </option>
+                          ))}
+                        </select>
+                        {selectedPersonaId && (
+                          <button
+                            onClick={() => {
+                              const updatedPersonas = savedPersonas.filter(p => p.id !== selectedPersonaId);
+                              setSavedPersonas(updatedPersonas);
+                              localStorage.setItem('sunoPersonas', JSON.stringify(updatedPersonas));
+                              setSelectedPersonaId('');
+                            }}
+                            disabled={loading}
+                            className="px-3 py-2 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg transition"
+                            title="Delete this persona"
+                          >
+                            ×
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {savedPersonas.length}/10 personas saved
+                        {savedPersonas.length >= 10 && ' - Maximum reached'}
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1011,11 +1214,10 @@ export default function Home() {
                   disabled={loading}
                   maxLength={500}
                 />
-                <div className={`absolute bottom-2 right-2 text-xs font-semibold ${
-                  prompt.length > 450 ? 'text-red-500' :
-                  prompt.length > 200 ? 'text-orange-500' :
-                  'text-gray-400'
-                }`}>
+                <div className={`absolute bottom-2 right-2 text-xs font-semibold ${prompt.length > 450 ? 'text-red-500' :
+                    prompt.length > 200 ? 'text-orange-500' :
+                      'text-gray-400'
+                  }`}>
                   {prompt.length}/500 {prompt.length > 200 && '⚠️ Long prompts may have issues'}
                 </div>
               </div>
@@ -1050,11 +1252,10 @@ export default function Home() {
                     maxLength={1000}
                   />
                   <p className="text-xs text-gray-500 mt-1">e.g., &quot;jazz, melancholic, piano &quot; or &quot; rock, energetic, guitar solo &quot;</p>
-                  <div className={`absolute top-9 right-3 text-xs font-semibold ${
-                    style.length > 900 ? 'text-red-500' :
-                    style.length > 700 ? 'text-orange-500' :
-                    'text-gray-400'
-                  }`}>
+                  <div className={`absolute top-9 right-3 text-xs font-semibold ${style.length > 900 ? 'text-red-500' :
+                      style.length > 700 ? 'text-orange-500' :
+                        'text-gray-400'
+                    }`}>
                     {style.length}/1000
                   </div>
                 </div>
@@ -1088,9 +1289,8 @@ export default function Home() {
             <button
               onClick={generateSong}
               disabled={loading}
-              className={`w-full text-white py-4 rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg ${
-                loading ? 'bg-gray-400' : 'bg-[#556FB5] hover:bg-[#556FB5]/90'
-              }`}
+              className={`w-full text-white py-4 rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg ${loading ? 'bg-gray-400' : 'bg-[#556FB5] hover:bg-[#556FB5]/90'
+                }`}
             >
               {loading ? 'Creating your song...' : 'Generate Song'}
             </button>
@@ -1114,7 +1314,7 @@ export default function Home() {
           {audioUrl && (
             <div className="p-6 bg-green-50 border border-green-200 rounded-lg space-y-4">
               <p className="text-green-800 font-semibold text-lg">{songTitle}</p>
-              
+
               {/* Track selector if multiple tracks available */}
               {generatedTracks.length > 1 && (
                 <div className="flex gap-2">
@@ -1131,11 +1331,10 @@ export default function Home() {
                           setCoverImages([track.imageUrl]);
                         }
                       }}
-                      className={`flex-1 py-2 px-3 rounded-lg font-semibold transition ${
-                        selectedTrackIndex === index
+                      className={`flex-1 py-2 px-3 rounded-lg font-semibold transition ${selectedTrackIndex === index
                           ? 'bg-green-600 text-white shadow-md'
                           : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
-                      }`}
+                        }`}
                     >
                       🎵 Version {index + 1}
                       {track.duration && (
@@ -1145,7 +1344,7 @@ export default function Home() {
                   ))}
                 </div>
               )}
-              
+
               <audio ref={audioRef} controls className="w-full" src={audioUrl}>
                 Your browser does not support audio playback.
               </audio>
@@ -1174,6 +1373,24 @@ export default function Home() {
                 >
                   <span>🎬</span>
                   <span>{videoGenerating ? 'Creating Video...' : videoUrl ? 'Video Ready ✓' : 'Create Video'}</span>
+                </button>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={downloadSong}
+                  className="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg font-semibold transition flex items-center justify-center space-x-2 hover:shadow-md"
+                >
+                  <span>⬇️</span>
+                  <span>Download</span>
+                </button>
+                <button
+                  onClick={() => setShowPersonaModal(true)}
+                  disabled={!currentTaskId || !currentAudioId || savedPersonas.length >= 10}
+                  className="flex-1 bg-amber-600 hover:bg-amber-700 text-white py-3 rounded-lg font-semibold transition flex items-center justify-center space-x-2 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                  title={savedPersonas.length >= 10 ? 'Maximum 10 personas reached' : 'Save voice as a reusable persona'}
+                >
+                  <span>🎤</span>
+                  <span>Save Voice</span>
                 </button>
               </div>
               {coverGenerating && (
@@ -1222,6 +1439,104 @@ export default function Home() {
             </p>
           </div>
         </div>
+
+        {/* Persona Creation Modal */}
+        {showPersonaModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 relative">
+              <button
+                onClick={() => {
+                  setShowPersonaModal(false);
+                  setPersonaName('');
+                  setPersonaDescription('');
+                }}
+                disabled={personaCreating}
+                className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition disabled:opacity-50"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+
+              <div className="flex items-center gap-3 mb-6">
+                <span className="text-3xl">🎤</span>
+                <h2 className="text-xl font-bold text-gray-800">Create Voice Persona</h2>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={personaName}
+                    onChange={(e) => setPersonaName(e.target.value)}
+                    placeholder="e.g., Smooth Jazz Singer"
+                    disabled={personaCreating}
+                    maxLength={50}
+                    className="w-full p-3 border border-gray-300 rounded-lg text-gray-800 placeholder:text-gray-400 focus:border-[#4ECDC4] focus:ring-2 focus:ring-[#4ECDC4]/20 focus:outline-none disabled:bg-gray-100"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Description <span className="text-gray-400">(optional)</span>
+                  </label>
+                  <textarea
+                    value={personaDescription}
+                    onChange={(e) => setPersonaDescription(e.target.value)}
+                    placeholder="e.g., A warm, mellow jazz voice with smooth phrasing and emotional delivery"
+                    disabled={personaCreating}
+                    maxLength={200}
+                    rows={3}
+                    className="w-full p-3 border border-gray-300 rounded-lg text-gray-800 placeholder:text-gray-400 focus:border-[#4ECDC4] focus:ring-2 focus:ring-[#4ECDC4]/20 focus:outline-none resize-none disabled:bg-gray-100"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    {personaDescription.length}/200 characters
+                  </p>
+                </div>
+
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <p className="text-sm text-amber-800">
+                    <strong>Note:</strong> This will save the voice characteristics from &quot;{songTitle}&quot; as a reusable persona.
+                  </p>
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => {
+                      setShowPersonaModal(false);
+                      setPersonaName('');
+                      setPersonaDescription('');
+                    }}
+                    disabled={personaCreating}
+                    className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={createPersona}
+                    disabled={personaCreating || !personaName.trim()}
+                    className="flex-1 px-4 py-3 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {personaCreating ? (
+                      <>
+                        <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span>Creating...</span>
+                      </>
+                    ) : (
+                      <span>Create Persona</span>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </>
   );
