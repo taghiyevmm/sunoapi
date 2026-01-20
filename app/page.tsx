@@ -1049,7 +1049,7 @@ export default function Home() {
                     disabled={loading}
                     maxLength={1000}
                   />
-                  <p className="text-xs text-gray-500 mt-1">e.g., "jazz, melancholic, piano" or "rock, energetic, guitar solo"</p>
+                  <p className="text-xs text-gray-500 mt-1">e.g., 'jazz, melancholic, piano' or 'rock, energetic, guitar solo'</p>
                   <div className={`absolute top-9 right-3 text-xs font-semibold ${
                     style.length > 900 ? 'text-red-500' :
                     style.length > 700 ? 'text-orange-500' :
