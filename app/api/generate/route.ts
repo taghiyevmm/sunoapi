@@ -28,6 +28,12 @@ interface GenerateRequestBody {
 
   // Advanced (optional)
   personaId?: string;   // Voice persona ID
+
+  // Advanced Voice Options
+  vocalGender?: 'm' | 'f';        // Vocal gender preference
+  negativeTags?: string;          // Styles to exclude (max 1000 chars)
+  styleWeight?: number;           // Style guidance weight (0.00-1.00)
+  weirdnessConstraint?: number;   // Creative deviation constraint (0.00-1.00)
 }
 
 export async function POST(request: Request) {
@@ -41,7 +47,12 @@ export async function POST(request: Request) {
     title,
     style,
     model = 'V5',
-    personaId
+    personaId,
+    // Advanced voice options
+    vocalGender,
+    negativeTags,
+    styleWeight,
+    weirdnessConstraint
   } = body;
 
   const headerKey = request.headers.get('x-suno-api-key')?.trim();
@@ -116,7 +127,11 @@ export async function POST(request: Request) {
       hasTitle: !!title,
       hasStyle: !!style,
       hasLyrics: !!lyrics,
-      hasPersonaId: !!personaId
+      hasPersonaId: !!personaId,
+      vocalGender: vocalGender || 'auto',
+      hasNegativeTags: !!negativeTags,
+      styleWeight,
+      weirdnessConstraint
     });
 
     // Build request payload
@@ -139,6 +154,20 @@ export async function POST(request: Request) {
       }
     } else {
       payload.prompt = prompt;
+    }
+
+    // Advanced voice options - only add if provided and not default
+    if (vocalGender && !instrumental) {
+      payload.vocalGender = vocalGender;
+    }
+    if (negativeTags && negativeTags.trim()) {
+      payload.negativeTags = negativeTags.trim();
+    }
+    if (styleWeight !== undefined && styleWeight !== 0.5) {
+      payload.styleWeight = styleWeight;
+    }
+    if (weirdnessConstraint !== undefined && weirdnessConstraint !== 0.5) {
+      payload.weirdnessConstraint = weirdnessConstraint;
     }
 
     // Generate music using Suno API
