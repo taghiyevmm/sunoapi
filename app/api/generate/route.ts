@@ -34,6 +34,7 @@ interface GenerateRequestBody {
   negativeTags?: string;          // Styles to exclude (max 1000 chars)
   styleWeight?: number;           // Style guidance weight (0.00-1.00)
   weirdnessConstraint?: number;   // Creative deviation constraint (0.00-1.00)
+  audioWeight?: number;           // Input audio influence weight (0.00-1.00)
 }
 
 export async function POST(request: Request) {
@@ -52,7 +53,8 @@ export async function POST(request: Request) {
     vocalGender,
     negativeTags,
     styleWeight,
-    weirdnessConstraint
+    weirdnessConstraint,
+    audioWeight
   } = body;
 
   const headerKey = request.headers.get('x-suno-api-key')?.trim();
@@ -131,7 +133,8 @@ export async function POST(request: Request) {
       vocalGender: vocalGender || 'auto',
       hasNegativeTags: !!negativeTags,
       styleWeight,
-      weirdnessConstraint
+      weirdnessConstraint,
+      audioWeight
     });
 
     // Build request payload
@@ -168,6 +171,9 @@ export async function POST(request: Request) {
     }
     if (weirdnessConstraint !== undefined && weirdnessConstraint !== 0.5) {
       payload.weirdnessConstraint = weirdnessConstraint;
+    }
+    if (audioWeight !== undefined && audioWeight !== 0.5) {
+      payload.audioWeight = audioWeight;
     }
 
     // Generate music using Suno API
