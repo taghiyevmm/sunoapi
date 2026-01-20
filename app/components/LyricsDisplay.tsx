@@ -49,7 +49,7 @@ export default function LyricsDisplay({ taskId, audioId, apiKey, audioRef }: Lyr
           'Content-Type': 'application/json',
           'x-suno-api-key': apiKey,
         },
-        body: JSON.stringify({ taskId, audioId }),
+        body: JSON.stringify({ taskId, audioId, apiKey }),
       });
 
       const data = await response.json();
