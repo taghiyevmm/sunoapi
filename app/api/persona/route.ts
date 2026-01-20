@@ -66,7 +66,8 @@ export async function POST(request: Request) {
 
     const data = await response.json();
 
-    console.log('Persona creation response:', data);
+    // Log full response for debugging
+    console.log('Persona creation response:', JSON.stringify(data, null, 2));
 
     // Check if the API returned an error
     if (data.code !== 200) {
@@ -77,10 +78,18 @@ export async function POST(request: Request) {
       );
     }
 
-    const responseTaskId = data.data?.taskId;
+    // Try multiple possible locations for taskId (API may return in different structures)
+    const responseTaskId = data.data?.taskId || data.taskId || data.response?.taskId;
 
     if (!responseTaskId) {
-      return NextResponse.json({ error: 'No task ID returned' }, { status: 500 });
+      console.error('No taskId found in response. Available keys:', {
+        topLevel: Object.keys(data),
+        dataLevel: data.data ? Object.keys(data.data) : 'no data object',
+      });
+      return NextResponse.json({
+        error: 'No task ID returned',
+        debug: { code: data.code, hasData: !!data.data, keys: Object.keys(data.data || {}) }
+      }, { status: 500 });
     }
 
     // Return task ID so frontend can poll for status
