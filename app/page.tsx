@@ -47,6 +47,14 @@ export default function Home() {
   const apiKey = '55fc5a26ff12dd6a1ab709d8d37e0cd4';
   const clientApiKey = 'dacf3ada40b69f623d6ad37c08d7c21b7ae1d14e66aeeb909cdaab1ccc2010ac';
 
+  // Custom generation options
+  const [activeTab, setActiveTab] = useState<'simple' | 'custom'>('simple');
+  const [instrumental, setInstrumental] = useState(false);
+  const [model, setModel] = useState<'V5' | 'V4_5PLUS' | 'V4_5ALL' | 'V4_5' | 'V4'>('V5');
+  const [title, setTitle] = useState('');
+  const [style, setStyle] = useState('');
+  const [lyrics, setLyrics] = useState('');
+
   const checkStatus = async (taskId: string, key: string) => {
     const maxAttempts = 20; // 10 minutes max (20 * 30 seconds) - following API recommendations
     let attempts = 0;
@@ -215,17 +223,42 @@ export default function Home() {
   };
 
   const generateSong = async () => {
-    if (!prompt.trim()) {
-      setError('Please enter a song idea');
-      return;
+    // Validation based on active tab
+    if (activeTab === 'custom') {
+      if (!title.trim()) {
+        setError('Please enter a song title');
+        return;
+      }
+      if (!style.trim()) {
+        setError('Please enter a style/genre');
+        return;
+      }
+      if (!instrumental && !lyrics.trim()) {
+        setError('Please enter lyrics or enable instrumental mode');
+        return;
+      }
+      if (style.length > 1000) {
+        setError('Style must be under 1000 characters');
+        return;
+      }
+    } else {
+      if (!prompt.trim()) {
+        setError('Please enter a song idea');
+        return;
+      }
+      if (prompt.length > 500) {
+        setError('Prompt must be under 500 characters');
+        return;
+      }
     }
 
     const activeKey = apiKey;
 
     // Basic content validation
+    const contentToCheck = activeTab === 'custom' ? `${title} ${style} ${lyrics}` : prompt;
     const sensitivePatterns = /\b(kill|death|violence|explicit|nsfw|sexual|drug|hate)\b/i;
-    if (sensitivePatterns.test(prompt)) {
-      setError('⚠️ Warning: Your prompt may contain sensitive content that could be rejected. Consider using more neutral language.');
+    if (sensitivePatterns.test(contentToCheck)) {
+      setError('⚠️ Warning: Your content may contain sensitive words that could be rejected. Consider using more neutral language.');
       // Still allow submission, just warn
     }
 
@@ -242,7 +275,19 @@ export default function Home() {
           'Content-Type': 'application/json',
           'X-API-Key': clientApiKey,
         },
-        body: JSON.stringify({ prompt, apiKey: activeKey }),
+        body: JSON.stringify({
+          ...(activeTab === 'custom' ? {
+            customMode: true,
+            title,
+            style,
+            ...(instrumental ? {} : { lyrics }),
+          } : {
+            prompt,
+          }),
+          instrumental,
+          model,
+          apiKey: activeKey,
+        }),
       });
 
       const data = await response.json();
@@ -755,23 +800,148 @@ export default function Home() {
             </div>
           )}
           <div className="space-y-4">
-            <div className="relative">
-              <textarea
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder="A melancholic jazz ballad about coffee shops..."
-                className="w-full h-32 p-4 border-2 border-gray-200 bg-white text-gray-800 placeholder:text-gray-400 rounded-lg focus:border-[#4ECDC4] focus:ring-2 focus:ring-[#4ECDC4]/20 focus:outline-none resize-none"
+            {/* Tab Buttons */}
+            <div className="flex rounded-lg overflow-hidden border border-gray-200">
+              <button
+                onClick={() => setActiveTab('simple')}
                 disabled={loading}
-                maxLength={500}
-              />
-              <div className={`absolute bottom-2 right-2 text-xs font-semibold ${
-                prompt.length > 450 ? 'text-red-500' : 
-                prompt.length > 200 ? 'text-orange-500' : 
-                'text-gray-400'
-              }`}>
-                {prompt.length}/500 {prompt.length > 200 && '⚠️ Long prompts may have issues'}
+                className={`flex-1 py-3 px-4 font-semibold transition flex items-center justify-center gap-2 ${
+                  activeTab === 'simple'
+                    ? 'bg-[#556FB5] text-white'
+                    : 'bg-white text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                <span>🎵</span>
+                <span>Simple</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('custom')}
+                disabled={loading}
+                className={`flex-1 py-3 px-4 font-semibold transition flex items-center justify-center gap-2 ${
+                  activeTab === 'custom'
+                    ? 'bg-[#556FB5] text-white'
+                    : 'bg-white text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                <span>✏️</span>
+                <span>Custom</span>
+              </button>
+            </div>
+
+            {/* Shared Options Bar */}
+            <div className="flex flex-wrap items-center gap-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={instrumental}
+                  onChange={(e) => setInstrumental(e.target.checked)}
+                  disabled={loading}
+                  className="w-4 h-4 text-[#556FB5] border-gray-300 rounded focus:ring-[#4ECDC4] cursor-pointer"
+                />
+                <span className="text-sm text-gray-700 font-medium">🎻 Instrumental (no vocals)</span>
+              </label>
+              <div className="flex items-center gap-2 ml-auto">
+                <label className="text-sm text-gray-700 font-medium">Model:</label>
+                <select
+                  value={model}
+                  onChange={(e) => setModel(e.target.value as typeof model)}
+                  disabled={loading}
+                  className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm bg-white text-gray-700 focus:border-[#4ECDC4] focus:ring-2 focus:ring-[#4ECDC4]/20 focus:outline-none cursor-pointer"
+                >
+                  <option value="V5">V5 (Recommended)</option>
+                  <option value="V4_5PLUS">V4.5 Plus</option>
+                  <option value="V4_5ALL">V4.5 All</option>
+                  <option value="V4_5">V4.5</option>
+                  <option value="V4">V4</option>
+                </select>
               </div>
             </div>
+
+            {/* Simple Mode Content */}
+            {activeTab === 'simple' && (
+              <div className="relative">
+                <textarea
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  placeholder="A melancholic jazz ballad about coffee shops..."
+                  className="w-full h-32 p-4 border-2 border-gray-200 bg-white text-gray-800 placeholder:text-gray-400 rounded-lg focus:border-[#4ECDC4] focus:ring-2 focus:ring-[#4ECDC4]/20 focus:outline-none resize-none"
+                  disabled={loading}
+                  maxLength={500}
+                />
+                <div className={`absolute bottom-2 right-2 text-xs font-semibold ${
+                  prompt.length > 450 ? 'text-red-500' :
+                  prompt.length > 200 ? 'text-orange-500' :
+                  'text-gray-400'
+                }`}>
+                  {prompt.length}/500 {prompt.length > 200 && '⚠️ Long prompts may have issues'}
+                </div>
+              </div>
+            )}
+
+            {/* Custom Mode Content */}
+            {activeTab === 'custom' && (
+              <div className="space-y-4">
+                {/* Title Input */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                  <input
+                    type="text"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="My Song Title"
+                    className="w-full p-3 border-2 border-gray-200 bg-white text-gray-800 placeholder:text-gray-400 rounded-lg focus:border-[#4ECDC4] focus:ring-2 focus:ring-[#4ECDC4]/20 focus:outline-none"
+                    disabled={loading}
+                  />
+                </div>
+
+                {/* Style Input */}
+                <div className="relative">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Style / Genre</label>
+                  <input
+                    type="text"
+                    value={style}
+                    onChange={(e) => setStyle(e.target.value)}
+                    placeholder="upbeat pop, dance, energetic"
+                    className="w-full p-3 border-2 border-gray-200 bg-white text-gray-800 placeholder:text-gray-400 rounded-lg focus:border-[#4ECDC4] focus:ring-2 focus:ring-[#4ECDC4]/20 focus:outline-none"
+                    disabled={loading}
+                    maxLength={1000}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">e.g., "jazz, melancholic, piano" or "rock, energetic, guitar solo"</p>
+                  <div className={`absolute top-9 right-3 text-xs font-semibold ${
+                    style.length > 900 ? 'text-red-500' :
+                    style.length > 700 ? 'text-orange-500' :
+                    'text-gray-400'
+                  }`}>
+                    {style.length}/1000
+                  </div>
+                </div>
+
+                {/* Lyrics Textarea - Hidden if instrumental */}
+                {!instrumental && (
+                  <div className="relative">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Lyrics</label>
+                    <textarea
+                      value={lyrics}
+                      onChange={(e) => setLyrics(e.target.value)}
+                      placeholder={`[Verse 1]\nWalking down the street...\n\n[Chorus]\nThis is my song...`}
+                      className="w-full h-40 p-4 border-2 border-gray-200 bg-white text-gray-800 placeholder:text-gray-400 rounded-lg focus:border-[#4ECDC4] focus:ring-2 focus:ring-[#4ECDC4]/20 focus:outline-none resize-none font-mono text-sm"
+                      disabled={loading}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Use [Verse], [Chorus], [Bridge] tags to structure your lyrics</p>
+                  </div>
+                )}
+
+                {instrumental && (
+                  <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                    <p className="text-purple-700 text-sm flex items-center gap-2">
+                      <span>🎻</span>
+                      <span>Instrumental mode enabled - no lyrics needed</span>
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
             <button
               onClick={generateSong}
               disabled={loading}
