@@ -55,6 +55,13 @@ export default function Home() {
   const [style, setStyle] = useState('');
   const [lyrics, setLyrics] = useState('');
 
+  // Advanced voice options
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [vocalGender, setVocalGender] = useState<'m' | 'f' | ''>('');
+  const [negativeTags, setNegativeTags] = useState('');
+  const [styleWeight, setStyleWeight] = useState(0.5);
+  const [weirdnessConstraint, setWeirdnessConstraint] = useState(0.5);
+
   const checkStatus = async (taskId: string, key: string) => {
     const maxAttempts = 20; // 10 minutes max (20 * 30 seconds) - following API recommendations
     let attempts = 0;
@@ -287,6 +294,11 @@ export default function Home() {
           instrumental,
           model,
           apiKey: activeKey,
+          // Advanced voice options - only include if not default
+          ...(vocalGender && !instrumental ? { vocalGender } : {}),
+          ...(negativeTags.trim() ? { negativeTags: negativeTags.trim() } : {}),
+          ...(styleWeight !== 0.5 ? { styleWeight } : {}),
+          ...(weirdnessConstraint !== 0.5 ? { weirdnessConstraint } : {}),
         }),
       });
 
@@ -855,6 +867,137 @@ export default function Home() {
                   <option value="V4">V4</option>
                 </select>
               </div>
+            </div>
+
+            {/* Advanced Voice Options Toggle */}
+            <div className="border border-gray-200 rounded-lg overflow-hidden">
+              <button
+                onClick={() => setShowAdvanced(!showAdvanced)}
+                disabled={loading}
+                className="w-full px-4 py-3 bg-gray-50 hover:bg-gray-100 flex items-center justify-between text-sm font-medium text-gray-700 transition disabled:opacity-50"
+              >
+                <span>🎤 Advanced Voice Options</span>
+                <svg
+                  className={`w-4 h-4 transition-transform ${showAdvanced ? 'rotate-180' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {showAdvanced && (
+                <div className="p-4 space-y-4 bg-white border-t border-gray-200">
+                  {/* Vocal Gender - only show if not instrumental */}
+                  {!instrumental && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Vocal Gender
+                      </label>
+                      <div className="flex gap-4">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="vocalGender"
+                            value=""
+                            checked={vocalGender === ''}
+                            onChange={() => setVocalGender('')}
+                            disabled={loading}
+                            className="text-[#556FB5] focus:ring-[#4ECDC4]"
+                          />
+                          <span className="text-sm text-gray-700">Auto</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="vocalGender"
+                            value="m"
+                            checked={vocalGender === 'm'}
+                            onChange={() => setVocalGender('m')}
+                            disabled={loading}
+                            className="text-[#556FB5] focus:ring-[#4ECDC4]"
+                          />
+                          <span className="text-sm text-gray-700">Male</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="vocalGender"
+                            value="f"
+                            checked={vocalGender === 'f'}
+                            onChange={() => setVocalGender('f')}
+                            disabled={loading}
+                            className="text-[#556FB5] focus:ring-[#4ECDC4]"
+                          />
+                          <span className="text-sm text-gray-700">Female</span>
+                        </label>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Negative Tags */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Exclude Styles
+                    </label>
+                    <input
+                      type="text"
+                      value={negativeTags}
+                      onChange={(e) => setNegativeTags(e.target.value)}
+                      placeholder="Heavy Metal, Screaming, Autotune"
+                      disabled={loading}
+                      maxLength={1000}
+                      className="w-full p-2 border border-gray-300 rounded-lg text-sm bg-white text-gray-800 placeholder:text-gray-400 focus:border-[#4ECDC4] focus:ring-2 focus:ring-[#4ECDC4]/20 focus:outline-none"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Comma-separated styles to avoid in generation
+                    </p>
+                  </div>
+
+                  {/* Style Weight Slider */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Style Strength: {styleWeight.toFixed(2)}
+                    </label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={styleWeight}
+                      onChange={(e) => setStyleWeight(parseFloat(e.target.value))}
+                      disabled={loading}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-[#556FB5]"
+                    />
+                    <div className="flex justify-between text-xs text-gray-500 mt-1">
+                      <span>Subtle</span>
+                      <span>Strong</span>
+                    </div>
+                  </div>
+
+                  {/* Weirdness Constraint Slider */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Creativity: {weirdnessConstraint.toFixed(2)}
+                    </label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={weirdnessConstraint}
+                      onChange={(e) => setWeirdnessConstraint(parseFloat(e.target.value))}
+                      disabled={loading}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-[#556FB5]"
+                    />
+                    <div className="flex justify-between text-xs text-gray-500 mt-1">
+                      <span>Conservative</span>
+                      <span>Experimental</span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Simple Mode Content */}
